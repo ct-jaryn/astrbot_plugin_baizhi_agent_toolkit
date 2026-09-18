@@ -18,7 +18,7 @@ help: |
   2. 保存后重载插件
   3. 发送 /baizhi_check 可检查连接（只做 initialize 与 tools/list，不调用计费工具）
   4. 之后直接让 LLM 调用 baizhi_web_search / baizhi_web_scrape / baizhi_web_extract 即可
-version: 1.0.1
+version: 1.0.2
 author: ct-jaryn
 repo: https://github.com/ct-jaryn/astrbot_plugin_baizhi_agent_toolkit
 astrbot_version: ">=4.16,<5"
@@ -28,3 +28,7 @@ tags:
   - 工具
   - 网页
   - 百智云
+# 市场分类。合法值（市场接口 /api/v1/market/categories 实际返回）：
+# 三方集成 / 生活 / 工具 / 长期记忆 / 知识库 / 娱乐 / 其他
+# 本插件是第三方托管服务的客户端（需用户自备百智云账号），归为三方集成。
+category: 三方集成

@@ -375,6 +375,20 @@ def test_market_text_fields_are_plain_text(main_module, known_tools):
         assert not any(line.strip().startswith("- ") for line in text.splitlines()), f"{field}: bullet list"
 
 
+def test_market_category_is_a_valid_key(main_module):
+    """The category must be one of the keys the market actually serves.
+
+    Read live from https://cloud.astrbot.app/api/v1/market/categories. An
+    unknown value would silently fall back to 其他 and hurt discoverability.
+    """
+    import yaml
+
+    meta = yaml.safe_load((PLUGIN_DIR / "metadata.yaml").read_text(encoding="utf-8"))
+    valid = {"三方集成", "生活", "工具", "长期记忆", "知识库", "娱乐", "其他"}
+
+    assert meta["category"] in valid, f"未知分类 {meta['category']!r}"
+
+
 def test_config_schema_covers_every_option_the_code_reads(main_module):
     import json
 

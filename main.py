@@ -12,7 +12,7 @@ from astrbot.api.star import Context, Star, register
 from .baizhi_client import DEFAULT_ENDPOINT, KNOWN_TOOLS, call_tool, probe
 
 PLUGIN_NAME = "astrbot_plugin_baizhi_agent_toolkit"
-PLUGIN_VERSION = "1.0.1"
+PLUGIN_VERSION = "1.0.2"
 PLUGIN_REPO = "https://github.com/ct-jaryn/astrbot_plugin_baizhi_agent_toolkit"
 
 _DISCLOSURE = "输入会发送到百智云托管服务，调用可能消耗服务额度。"
