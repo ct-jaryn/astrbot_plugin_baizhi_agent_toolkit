@@ -356,6 +356,25 @@ def test_metadata_matches_the_module_constants(main_module):
     assert meta["name"] == _MODULE_NAME, "plugin dir / metadata name must match"
 
 
+def test_market_text_fields_are_plain_text(main_module, known_tools):
+    """The market card renders `desc`/`short_desc` as plain text.
+
+    Verified against the live listing: `**bold**`, backticks and `-` bullets
+    all appear literally, and paragraph breaks collapse to spaces. So these
+    fields must read correctly with no Markdown applied.
+    """
+    import yaml
+
+    meta = yaml.safe_load((PLUGIN_DIR / "metadata.yaml").read_text(encoding="utf-8"))
+
+    for field in ("desc", "short_desc"):
+        text = meta.get(field) or ""
+        assert "**" not in text, f"{field}: Markdown bold would show literally"
+        assert "`" not in text, f"{field}: backticks would show literally"
+        assert "\n  - " not in text, f"{field}: Markdown bullets would show literally"
+        assert not any(line.strip().startswith("- ") for line in text.splitlines()), f"{field}: bullet list"
+
+
 def test_config_schema_covers_every_option_the_code_reads(main_module):
     import json
 
