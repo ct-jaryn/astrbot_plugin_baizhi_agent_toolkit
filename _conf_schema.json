@@ -1,0 +1,28 @@
+{
+  "baizhi_api_key": {
+    "type": "string",
+    "description": "百智云 API Key",
+    "hint": "在 https://agent-toolkit.app.baizhi.cloud/ 创建。只填 Key 本身，不要带 Bearer 前缀。注意：secret 只在管理面板遮罩显示，配置值仍会原样保存在插件配置文件中；本插件不会记录或回显它。",
+    "default": "",
+    "secret": true,
+    "obvious_hint": true
+  },
+  "endpoint": {
+    "type": "string",
+    "description": "MCP 服务地址",
+    "hint": "默认使用百智云托管端点 https://agent-toolkit.app.baizhi.cloud/mcp。仅在服务方调整地址时修改。",
+    "default": "https://agent-toolkit.app.baizhi.cloud/mcp"
+  },
+  "enabled_tools": {
+    "type": "list",
+    "description": "注册哪些工具",
+    "hint": "默认三个只读工具。取消勾选的工具不会出现在 LLM 的工具列表中；全部取消将恢复为默认三项。可选值：websearch_search、web_scrape、web_extract。",
+    "default": ["websearch_search", "web_scrape", "web_extract"]
+  },
+  "timeout_seconds": {
+    "type": "int",
+    "description": "单次调用超时（秒）",
+    "hint": "网页读取与信息提取可能较慢，建议不低于 60 秒。",
+    "default": 60
+  }
+}

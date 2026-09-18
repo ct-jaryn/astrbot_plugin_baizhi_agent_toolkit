@@ -1,0 +1,38 @@
+name: astrbot_plugin_baizhi_agent_toolkit
+display_name: 百智云 Agent Toolkit
+short_desc: 百智云托管的搜索与网页读取工具（自带 Key，可选启用）
+desc: |
+  百智云 Agent Toolkit 为 AstrBot 提供托管的联网能力：网页搜索、网页正文读取、按字段或指令的信息提取。
+
+  本插件不自带任何抓取能力，也不复制服务端实现——它通过远程 MCP（Streamable HTTP）连接百智云托管服务，
+  使用**用户自己的**百智云 API Key，仅把工具调用转发过去。
+
+  **需要你自己准备的东西**
+  - 一个百智云账号与 API Key（在 https://agent-toolkit.app.baizhi.cloud/ 创建）
+  - 额度：调用会消耗你账号下的服务额度，可能产生费用
+
+  **默认启用的三个工具**（可在插件配置中取消勾选）
+  - `baizhi_web_search` — 搜索公开网页
+  - `baizhi_web_scrape` — 读取单个公开网页
+  - `baizhi_web_extract` — 按字段或指令提取网页信息
+
+  **数据与隐私**
+  - 你填写的查询词、目标 URL 与提取要求会发送到百智云托管服务
+  - 不要提交内网地址、带凭据的链接或敏感数据
+
+  **本插件不代表 AstrBot 官方插件，也未获得 AstrBot 官方认证。**
+help: |
+  1. 在插件配置中填入百智云 API Key（只填 Key，不带 Bearer 前缀）
+  2. 保存后重载插件
+  3. 发送 /baizhi_check 可检查连接（只做 initialize 与 tools/list，不调用计费工具）
+  4. 之后直接让 LLM 调用 baizhi_web_search / baizhi_web_scrape / baizhi_web_extract 即可
+version: 1.0.0
+author: ct-jaryn
+repo: https://github.com/ct-jaryn/astrbot_plugin_baizhi_agent_toolkit
+astrbot_version: ">=4.16,<5"
+social_link: https://baizhi.cloud/landing/agent-toolkit
+tags:
+  - 搜索
+  - 工具
+  - 网页
+  - 百智云
