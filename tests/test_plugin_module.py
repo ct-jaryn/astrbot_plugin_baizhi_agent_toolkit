@@ -1,9 +1,8 @@
 """Tests for the plugin module itself (tool registration, config parsing).
 
-AstrBot is not installed here, so `astrbot.*` is stubbed with copies of the real
-upstream definitions. `FunctionTool` is reproduced verbatim (field order,
-defaults and the JSON-Schema `model_validator` all matter), so these tests fail
-the same way the real plugin would if a tool schema is wrong.
+AstrBot is not installed here. These minimal stubs model ToolSchema and
+FunctionTool construction, field order and JSON-Schema validation. They do not
+prove host lifecycle, execution, storage or compatibility with a live release.
 
 Run:  pytest tests/ -v
 """
@@ -12,7 +11,6 @@ from __future__ import annotations
 
 import importlib.util
 import sys
-import tempfile
 import types
 from pathlib import Path
 
@@ -22,16 +20,11 @@ from pydantic.dataclasses import dataclass
 
 PLUGIN_DIR = Path(__file__).resolve().parents[1]
 
-# The published plugin directory is `astrbot_plugin_baizhi_agent_toolkit`
-# (underscores), because AstrBot imports plugins as Python packages. This
-# checkout lives in a hyphenated archive folder, so expose it under the real
-# name via a symlink before importing.
-_LINK_ROOT = Path(tempfile.gettempdir()) / "astrbot-plugin-import-root"
+# Load this exact checkout, never a stale shared /tmp symlink from another run.
 _MODULE_NAME = "astrbot_plugin_baizhi_agent_toolkit"
-_LINK_ROOT.mkdir(exist_ok=True)
-_LINK = _LINK_ROOT / _MODULE_NAME
-if not _LINK.exists():
-    _LINK.symlink_to(PLUGIN_DIR, target_is_directory=True)
+_package = types.ModuleType(_MODULE_NAME)
+_package.__path__ = [str(PLUGIN_DIR)]
+sys.modules[_MODULE_NAME] = _package
 
 
 def _install_astrbot_stubs() -> None:
@@ -154,7 +147,6 @@ def _install_astrbot_stubs() -> None:
 
 
 _install_astrbot_stubs()
-sys.path.insert(0, str(_LINK_ROOT))
 
 
 @pytest.fixture(scope="module")
@@ -188,11 +180,13 @@ def test_comma_string_is_accepted(main_module):
     assert main_module._parse_enabled_tools("web_scrape, web_extract") == ["web_scrape", "web_extract"]
 
 
-def test_unknown_entries_are_dropped_and_empty_falls_back(main_module, known_tools):
+def test_unknown_entries_are_dropped_and_empty_stays_disabled(main_module, known_tools):
     assert main_module._parse_enabled_tools(["web_scrape", "nope"]) == ["web_scrape"]
-    # An all-unknown selection must not silently disable every tool.
-    assert main_module._parse_enabled_tools(["nope"]) == known_tools
-    assert main_module._parse_enabled_tools([]) == known_tools
+    assert main_module._parse_enabled_tools(["nope"]) == []
+    assert main_module._parse_enabled_tools([]) == []
+    assert main_module._parse_enabled_tools("") == []
+    assert main_module._parse_enabled_tools({"web_scrape": True}) == []
+    assert main_module._parse_enabled_tools(["web_scrape", "web_scrape"]) == ["web_scrape"]
 
 
 # --- tool definitions ---
@@ -299,6 +293,42 @@ def test_plugin_registers_only_enabled_tools(main_module):
 
     assert [t.name for t in context.registered_tools] == ["baizhi_web_scrape"]
     assert [t.name for t in instance.tools] == ["baizhi_web_scrape"]
+
+
+def test_explicit_empty_selection_registers_no_tools(main_module):
+    instance, context = _plugin(main_module, {"baizhi_api_key": "K", "enabled_tools": []})
+    assert instance.tools == []
+    assert context.registered_tools == []
+
+
+def test_configuration_endpoint_is_not_echoed_to_logs_or_check(main_module):
+    logger = sys.modules["astrbot.api"].logger
+    logger.records.clear()
+    instance, _ = _plugin(main_module, {"endpoint": "https://SECRET-IN-URL.invalid", "enabled_tools": []})
+    class Event:
+        def plain_result(self, text):
+            return text
+    async def collect():
+        return [message async for message in instance.baizhi_check(Event())]
+    text = "\n".join(_run(collect))
+    assert "SECRET-IN-URL" not in text + str(logger.records)
+    assert "已启用工具：无" in text
+
+
+def test_check_uses_configured_total_timeout(main_module, monkeypatch):
+    calls = []
+    async def fake_probe(**kwargs):
+        calls.append(kwargs)
+        return True, "synthetic probe"
+    monkeypatch.setattr(main_module, "probe", fake_probe)
+    instance, _ = _plugin(main_module, {"baizhi_api_key": "K", "timeout_seconds": 12})
+    class Event:
+        def plain_result(self, text):
+            return text
+    async def collect():
+        return [message async for message in instance.baizhi_check(Event())]
+    _run(collect)
+    assert calls[0]["timeout_seconds"] == 12
 
 
 def test_plugin_registers_all_by_default(main_module, known_tools):

@@ -12,12 +12,12 @@ from astrbot.api.star import Context, Star, register
 from .baizhi_client import DEFAULT_ENDPOINT, KNOWN_TOOLS, call_tool, probe
 
 PLUGIN_NAME = "astrbot_plugin_baizhi_agent_toolkit"
-PLUGIN_VERSION = "1.0.2"
+PLUGIN_VERSION = "1.0.3-rc.1"
 PLUGIN_REPO = "https://github.com/ct-jaryn/astrbot_plugin_baizhi_agent_toolkit"
 
 _DISCLOSURE = "输入会发送到百智云托管服务，调用可能消耗服务额度。"
 
-# 只在注册时给 LLM 看的参数名保持与 MCP 工具一致，转发时原样传给服务。
+# JSON 字符串参数由 baizhi_arguments 转换为 MCP 的 filter / fields 对象。
 _TOOL_SPECS: dict[str, dict] = {
     "websearch_search": {
         "name": "baizhi_web_search",
@@ -113,18 +113,20 @@ _TOOL_SPECS: dict[str, dict] = {
 def _parse_enabled_tools(raw) -> list[str]:
     """解析启用的工具；同时接受配置面板的列表与手改配置里的逗号分隔字符串。
 
-    全部无法识别时回退到默认三项，避免手改配置把工具静默关光。
+    仅缺省时启用三项；显式空列表关闭全部，未知配置不会扩大能力。
     """
     if raw is None:
         return list(KNOWN_TOOLS)
     if isinstance(raw, str):
         items = [part.strip() for part in raw.split(",")]
     elif isinstance(raw, (list, tuple, set)):
-        items = [str(part).strip() for part in raw]
+        items = [part.strip() for part in raw if isinstance(part, str)]
     else:
-        return list(KNOWN_TOOLS)
-    selected = [item for item in items if item in KNOWN_TOOLS]
-    return selected or list(KNOWN_TOOLS)
+        logger.warning("百智云 Agent Toolkit：enabled_tools 类型无效，已关闭全部工具。")
+        return []
+    if any(item and item not in KNOWN_TOOLS for item in items):
+        logger.warning("百智云 Agent Toolkit：已忽略未知的 enabled_tools 项。")
+    return list(dict.fromkeys(item for item in items if item in KNOWN_TOOLS))
 
 
 @register(
@@ -149,13 +151,14 @@ class BaizhiAgentToolkitPlugin(Star):
             )
 
         self.tools = [self._build_tool(key) for key in self.enabled_tools]
-        self.context.add_llm_tools(*self.tools)
+        if self.tools:
+            self.context.add_llm_tools(*self.tools)
         logger.info(
             f"百智云 Agent Toolkit {PLUGIN_VERSION} 已注册工具：{', '.join(self.enabled_tools) or '无'}；"
-            f"端点 {self._endpoint()}；API Key {'已配置' if api_key_set else '未配置'}"
+            f"固定百智云端点；API Key {'已配置' if api_key_set else '未配置'}"
         )
 
-    # --- 配置读取（每次调用都重新读，配置改动后无需重建工具）---
+    # --- 当前加载时的配置快照；保存配置后需重载插件 ---
 
     def _api_key(self) -> str:
         return str(self.plugin_config.get("baizhi_api_key") or "").strip()
@@ -165,8 +168,8 @@ class BaizhiAgentToolkitPlugin(Star):
 
     def _timeout(self) -> int:
         try:
-            return max(int(self.plugin_config.get("timeout_seconds") or 60), 1)
-        except (TypeError, ValueError):
+            return min(max(int(self.plugin_config.get("timeout_seconds") or 60), 1), 300)
+        except (TypeError, ValueError, OverflowError):
             return 60
 
     # --- 工具构造 ---
@@ -203,18 +206,17 @@ class BaizhiAgentToolkitPlugin(Star):
 
     @filter.command("baizhi_check")
     async def baizhi_check(self, event: AstrMessageEvent):
-        """检查百智云连接配置（仅 initialize 与 tools/list，不发起计费工具调用）。"""
+        """检查连接，仅 discovery，不执行 tools/call；计费由服务方决定。"""
         if not self._api_key():
             yield event.plain_result(
                 "百智云 Agent Toolkit 尚未配置 API Key。请在插件配置中填写后重载插件。\n"
-                f"端点：{self._endpoint()}\n已启用工具：{', '.join(self.enabled_tools)}"
+                f"端点：{DEFAULT_ENDPOINT}\n已启用工具：{', '.join(self.enabled_tools) or '无'}"
             )
             return
 
-        # 只做 initialize + tools/list：不产生计费调用，也不会回显 API Key。
-        ok, message = await probe(api_key=self._api_key(), endpoint=self._endpoint())
+        ok, message = await probe(api_key=self._api_key(), endpoint=self._endpoint(), timeout_seconds=self._timeout())
         yield event.plain_result(
             f"{'连接正常。' if ok else '连接失败。'}\n"
-            f"端点：{self._endpoint()}\n"
-            f"已启用工具：{', '.join(self.enabled_tools)}\n{message}"
+            f"端点：{DEFAULT_ENDPOINT}\n"
+            f"已启用工具：{', '.join(self.enabled_tools) or '无'}\n{message}"
         )
