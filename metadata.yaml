@@ -12,13 +12,13 @@ desc: |
 
   数据与隐私：你填写的查询词、目标 URL 与提取要求会发送到百智云托管服务。请不要提交内网地址、带凭据的链接或敏感数据。
 
-  本插件不代表 AstrBot 官方插件，也未获得 AstrBot 官方认证。
+  本插件不代表 AstrBot 官方插件，也未获得 AstrBot 官方认证。本目录为 1.0.3-rc.1 本地候选，尚未发布或完成真实宿主验收。
 help: |
   1. 在插件配置中填入百智云 API Key（只填 Key，不带 Bearer 前缀）
   2. 保存后重载插件
-  3. 发送 /baizhi_check 可检查连接（只做 initialize 与 tools/list，不调用计费工具）
+  3. 发送 /baizhi_check 可检查连接（只做 initialize 与 tools/list，不执行 tools/call；计费由服务方决定）
   4. 之后直接让 LLM 调用 baizhi_web_search / baizhi_web_scrape / baizhi_web_extract 即可
-version: 1.0.2
+version: 1.0.3-rc.1
 author: ct-jaryn
 repo: https://github.com/ct-jaryn/astrbot_plugin_baizhi_agent_toolkit
 astrbot_version: ">=4.16,<5"

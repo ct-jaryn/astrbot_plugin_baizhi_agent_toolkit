@@ -1,111 +1,75 @@
 # 百智云 Agent Toolkit for AstrBot
 
-把[百智云 Agent Toolkit](https://baizhi.cloud/landing/agent-toolkit) 的托管联网能力接进 AstrBot：
-网页搜索、网页正文读取、按字段或指令的信息提取。
+本目录是 **1.0.3-rc.1 本地修复候选，尚未发布**。它修复公开 1.0.2 的参数映射、密钥回显路径、MCP 2 结果解析、空工具列表、错误处理，以及真实宿主绑定插件实例后工具 handler 参数不匹配的问题。不要把市场中的 1.0.2 当作已包含这些修复；本次没有上传或更新市场。
 
-插件本身**不抓取任何网页**，也不复制服务端实现——它通过远程 MCP（Streamable HTTP）把工具调用转发给
-百智云托管服务，使用**你自己的**百智云 API Key。
+插件通过远程 MCP（Streamable HTTP）连接[百智云托管服务](https://agent-toolkit.app.baizhi.cloud/)，使用用户自己的 API Key。它不实现抓取后端，不代表 AstrBot 官方认证。
 
-> 本插件不是 AstrBot 官方插件，也未获得 AstrBot 官方认证或背书。
+## 运行前提与安装
 
-## 前置条件
+- AstrBot `>=4.16,<5`；运行依赖要求 Python 3.10 或以上，本次离线测试使用 Python 3.12。Python 3.10 的异常组使用 requirements 中的 exceptiongroup backport；该解释器版本尚未单独验收。
+- MCP SDK `>=1.30.0,<3`。客户端已分别测试 1.30.0 和 2.2.0；本次真实 AstrBot 4.28.1 宿主验证使用其声明允许的 MCP 1.30.0（宿主要求 `<2`）。其他 AstrBot/MCP 组合仍需验收，不应为了本插件绕过宿主的依赖约束。
+- 账号、专用可撤销 API Key 和服务额度。工具输入会发送到百智云，调用可能消耗额度并产生费用。
 
-| 需要 | 说明 |
-| --- | --- |
-| AstrBot | `>=4.16,<5` |
-| 百智云账号与 API Key | 在 <https://agent-toolkit.app.baizhi.cloud/> 创建 |
-| 服务额度 | 工具调用会消耗你账号下的额度，**可能产生费用** |
-| 网络 | 需要能访问 `agent-toolkit.app.baizhi.cloud` |
-
-## 安装
-
-**从插件市场安装**：在 AstrBot 管理面板的插件市场中搜索「百智云 Agent Toolkit」并安装。
-
-**手动安装**：把本目录放到 AstrBot 的 `data/plugins/astrbot_plugin_baizhi_agent_toolkit/`，
-确保目录名为 `astrbot_plugin_baizhi_agent_toolkit`（AstrBot 以 Python 包的形式导入插件，
-目录名含连字符会导入失败），然后重载插件。
-
-Python 依赖 `mcp>=1.0.0` 与 `httpx>=0.24` 会自动安装。
+本候选需要人工安装到隔离的 AstrBot 测试环境：将本目录复制为 `data/plugins/astrbot_plugin_baizhi_agent_toolkit/`，在该环境安装 `requirements.txt` 后加载。正式发布前不要把候选直接覆盖到生产机器人。
 
 ## 配置
 
-在管理面板的插件配置页填写：
+| 配置项 | 默认值 | 行为 |
+| --- | --- | --- |
+| `baizhi_api_key` | 空 | 只填 Key，不带 Bearer 前缀；空值不会发请求 |
+| `endpoint` | 固定百智云 HTTPS 地址 | 为兼容旧配置保留字段；本候选只接受 `https://agent-toolkit.app.baizhi.cloud/mcp`，其他值在发送凭据前拒绝 |
+| `enabled_tools` | 三个工具 | 未设置时默认三项；显式空列表关闭全部；未知项忽略并告警；重复项去重 |
+| `timeout_seconds` | 60 | 握手、分页发现与工具调用合计的总超时；配置限制为 1–300 秒 |
 
-| 配置项 | 类型 | 默认值 | 说明 |
-| --- | --- | --- | --- |
-| `baizhi_api_key` | 密文输入 | 空 | 百智云 API Key。**只填 Key 本身，不要带 `Bearer ` 前缀** |
-| `endpoint` | 字符串 | 百智云托管端点 | 仅在服务方调整地址时修改 |
-| `enabled_tools` | 列表 | 三个工具全开 | 取消勾选的工具不会出现在 LLM 的工具列表里 |
-| `timeout_seconds` | 整数 | `60` | 单次调用超时，网页读取与提取可能较慢 |
+保存配置后重载插件。`secret: true` **只遮罩管理面板，不加密配置文件**。Key 仍由 AstrBot 原样保存在插件配置文件中；控制该文件和备份的访问权限。
 
-**关于 `secret` 必须说清楚的一点**：配置项的 `secret: true` 只在管理面板**遮罩显示**（并提供
-临时显示按钮），**不会加密配置文件里的值**——Key 仍以明文保存在
-`data/config/astrbot_plugin_baizhi_agent_toolkit_config.json`。本插件不会记录、回显或主动输出该 Key。
+## 三个工具与参数
 
-填好后**重载插件**，再发送 `/baizhi_check` 检查连通性。
+| AstrBot 名称 | MCP 工具 | 参数说明 |
+| --- | --- | --- |
+| `baizhi_web_search` | `websearch_search` | query、整数 count 1–50、time_range、need_summary；domains_json / exclude_domains_json 解码并映射为 filter 对象 |
+| `baizhi_web_scrape` | `web_scrape` | URL、语言、markdown/json 格式；download 默认 false |
+| `baizhi_web_extract` | `web_extract` | URL；fields_json 解码为 fields 对象；fields 或 instruction 至少提供一项；download 默认 false |
 
-## 工具
+站点限定使用 JSON 数组，例如 `["example.com"]`，不要把 site: 拼入 query。字段使用 JSON 对象，例如 `{"title":"string","price":"number"}`，支持 string、number、boolean、array。未知参数和任意工具名会在联网前拒绝。映射依据仓库保留的 **2026-09-16 历史 schema**，不是当前生产服务 schema 验收。
 
-| 工具 | 作用 |
-| --- | --- |
-| `baizhi_web_search` | 搜索公开网页 |
-| `baizhi_web_scrape` | 读取单个公开网页（markdown 或 json） |
-| `baizhi_web_extract` | 按 `fields_json` 或 `instruction` 提取页面信息 |
+输入校验拒绝非 HTTP(S)、明显私网 IP/本地主机、带凭据的链接、fragment、控制字符和非标准端口。**不解析 DNS，也不检查百智云远端抓取的跳转链**；不是完整 SSRF 防护。服务端仍须负责其抓取边界。不要发送私密链接、个人信息或敏感组织数据。
 
-三者都只接受**公开**页面地址。请勿提交内网地址、带凭据的链接或敏感数据。
+这些工具不能保证只读：搜索摘要可能被服务记录；`download=true` 可能创建远端下载归档。只有用户明确要求下载时才应开启。费用、留存、地域和删除策略以服务方实际政策为准。
 
-搜索的站点过滤请用 `domains_json` / `exclude_domains_json` 参数（JSON 数组字符串），
-**不要在 `query` 里写 `site:` 语法**。
+## 连通性检查与失败处理
 
-## 指令
+`/baizhi_check` 只执行 MCP 初始化和有界分页发现，不调用 tools/call；它只能说明连接及受支持工具是否可见，不能证明抓取/提取或计费策略已经验收。若只看到部分工具，会报告其可见的支持工具集合。
 
-- `/baizhi_check` —— 检查 API Key 与端点是否可用。只做 `initialize` 与 `tools/list`，
-  **不调用任何计费工具**，也不会输出或回显 API Key。
+客户端禁止重定向和继承环境代理，只将凭据发到固定端点。**与 1.0.2 的兼容性变化：自定义 endpoint 和 HTTP(S)_PROXY/ALL_PROXY 等环境代理配置不再生效；依赖企业代理访问的部署需先验证直连路径，本候选没有代理配置入口。** 错误消息不带上游异常正文；正常结果中的当前 Key 精确回显会被脱敏，结构化 key/value 也会处理。MCP 与 HTTP 的已知诊断日志在本次调用上下文内被抑制，避免请求头/响应诊断回显；不全局关闭其他插件日志。这不是通用 PII 检测，也不证明 AstrBot 自身的日志、存储、导出或全部依赖没有泄露风险。
 
-## 计费与数据
+MCP 1 与 2 的结构化结果及错误状态分别适配。工具错误明确返回失败文字，不自动进行应用层 tools/call 重试。调用取消会传递给客户端；无法保证已开始的远端工作停止或不计费。结果输出上限为 2,000,000 字符，检查发生在 SDK 解析以后，不能限制传输量或峰值解析内存。
 
-- 每次工具调用都会把请求发往百智云托管服务，并消耗你账号下的服务额度。
-- 发送的内容包括：搜索词、目标 URL、提取字段或指令，以及必要的调用参数。
-- 服务端对返回内容的留存策略以百智云的服务条款为准。
-- `/baizhi_check` 只做初始化与工具列举，不产生计费调用。
+## 可复现的离线测试
 
-## 故障排查
+使用专用环境，不需要真实 Key、服务账号或网络服务端：
 
-| 现象 | 处理 |
-| --- | --- |
-| 工具调用返回「未配置 API Key」 | 在插件配置中填入 Key 并重载插件 |
-| `/baizhi_check` 报认证失败 | 检查 Key 是否填错、是否过期，以及是否误加了 `Bearer ` 前缀 |
-| 调用超时 | 调大 `timeout_seconds`；确认机器能访问托管端点 |
-| LLM 看不到工具 | 检查 `enabled_tools` 是否把三个工具都取消了勾选 |
-| 提示 `mcp` 包不可用 | 在 AstrBot 环境中执行 `pip install "mcp>=1.0.0"` |
-
-## 开发与测试
-
-```bash
-pip install -r requirements.txt pytest pytest-asyncio uvicorn jsonschema pyyaml
-pytest tests/ -v
+```sh
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements-dev.txt
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider tests/
 ```
 
-（`uvicorn`、`jsonschema`、`pyyaml` 仅供测试使用，插件运行本身不需要。）
+安装依赖需要访问包索引；测试本身不联网。`tests/test_client.py` 使用真实 MCP SDK 和内存 HTTP transport，autouse fixture 阻止真实 HTTP transport。假服务会拒绝错误合成 Key，并验证实际 JSON-RPC 参数契约。测试覆盖三工具映射、URL/参数拒绝、redirect/HTTP/MCP 错误、Key 回显、两代结果字段、SDK/HTTP 库缺失、超时取消、分页与输出限制。
 
-测试分两部分，都不使用真实百智云账号、Key 或额度：
+`tests/test_plugin_module.py` 使用 AstrBot API 的最小 stub 验证注册、空列表、去重、配置、日志及命令。测试会模拟宿主的 `functools.partial(handler, instance)` 绑定，再传消息事件；仅直接调用未绑定的闭包会漏掉真实执行错误。stub 本身不能证明宿主生命周期兼容。
 
-- `tests/test_client.py` —— 起一个本地 MCP 服务（三个工具 + Bearer 鉴权），验证传输接线、
-  Authorization 头确实携带配置的 Key、空参数不会被当成实参转发、以及各条失败路径都返回可读信息
-  而不是抛异常。
-- `tests/test_plugin_module.py` —— 用上游 `astrbot` 定义的最小副本打桩，验证工具注册、配置解析、
-  参数转发、启动日志不泄露 Key。
+2026-09-20 另在官方 AstrBot 4.28.1 源码 [6914bc3](https://github.com/AstrBotDevs/AstrBot/commit/6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334)、Python 3.12.14、MCP 1.30.0 的专用环境通过了 17 项隔离检查：真实 `Context` / `PluginManager` 加载本地插件副本，注册并导出三个 LLM 工具 schema，经 `FunctionToolManager` 的 `ToolSet` 权限 wrapper 调用；真实配置文件保存后重载、空列表关闭全部、恢复单个工具，以及卸载时移除工具、模块、命令注册和配置文件。配置与 SQLite 数据库位于隔离的 `ASTRBOT_ROOT`，临时文件使用独立 `TMPDIR`。
 
-客户端代码同时兼容 `mcp` 1.x 与 2.x（两代 SDK 的传输函数名、`read_timeout_seconds` 类型、
-传输返回的元组长度都不同），两个版本下测试均通过。
+三工具执行使用真实宿主调用路径和 MCP SDK，只有远端 HTTP 响应由 `httpx.MockTransport` 模拟，Key 为合成值，所有外部 socket 连接被阻止。没有启动 WebUI、实际 LLM provider 会话或生产服务。修复前真实 wrapper 的四次调用均因 handler 多收一个位置参数失败；修复后 17 项全部通过。宿主验收在独立临时环境执行；普通单测不引入完整宿主依赖，也不等同于这组宿主验收。
 
-## 已知限制
+## 发布前仍需完成
 
-- 未在真实百智云服务上用真实 Key 做端到端验收；本地测试用的是模拟服务。
-- 每次工具调用新建一个 MCP 会话（而非复用长连接）：失败语义更清晰，代价是每次调用多一次握手。
-- 只注册三个工具；服务端若提供更多能力，需要另行接入。
-- `endpoint` 未做白名单校验，请勿填写来路不明的地址——插件会把你的 Key 以 Bearer 形式发给该地址。
+1. WebUI 安装与配置操作、真实命令分发、实际 LLM provider 会话及多插件冲突验收；其他受支持 AstrBot 版本还需兼容性验证。本次真实管理器加载本地副本不等于已验证 WebUI 安装或完整 Agent 回合。
+2. 用已授权、专用可撤销 Key 核对现网 schema/权限，并完成有明确额度边界的三个工具生产验收。
+3. OS 凭据保护、备份/导出与访问权限、网络/TLS/代理部署、并发和响应内存边界验收。本次保存重载仅证明配置值能持久化并生效，不证明加密或 OS 隔离。
+4. 完整依赖锁/安全审查、发布身份及素材权利确认、候选人工复核；再单独发布并核验市场实际版本。
 
-## 许可证
+以上仍未完成的步骤不因隔离宿主检查通过而豁免。本次没有接受平台协议、发布正式版本或宣称市场审核通过。
 
-MIT
+MIT；见 LICENSE。
