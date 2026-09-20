@@ -9,6 +9,7 @@ Run:  pytest tests/ -v
 
 from __future__ import annotations
 
+import functools
 import importlib.util
 import sys
 import types
@@ -164,6 +165,10 @@ def known_tools(main_module):
 def _plugin(main_module, config=None):
     context = sys.modules["astrbot.api.star"].Context()
     instance = main_module.BaizhiAgentToolkitPlugin(context, config if config is not None else {"baizhi_api_key": "K"})
+    # PluginManager binds each plugin handler to its instance after construction.
+    # The real FunctionToolManager then passes the message event to that partial.
+    for tool in context.registered_tools:
+        tool.handler = functools.partial(tool.handler, instance)
     return instance, context
 
 

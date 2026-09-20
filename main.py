@@ -182,9 +182,12 @@ class BaizhiAgentToolkitPlugin(Star):
         被判定为必填而抛 ValidationError。
         """
         spec = _TOOL_SPECS[key]
-        plugin = self
 
-        async def handler(event: AstrMessageEvent, **kwargs) -> str:
+        async def handler(
+            plugin: "BaizhiAgentToolkitPlugin", event: AstrMessageEvent, **kwargs
+        ) -> str:
+            # PluginManager binds the plugin instance before the tool wrapper
+            # passes the event. Match that two-argument host calling convention.
             # `key` is the MCP tool name on the hosted service; spec["name"] is
             # the AstrBot-facing name (baizhi_* prefix, to avoid colliding with
             # other plugins). Sending the prefixed name to the service would
