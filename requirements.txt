@@ -1,2 +1,4 @@
-mcp>=1.0.0
-httpx>=0.24
+mcp>=1.30.0,<3
+httpx>=0.28.1,<1
+anyio>=4.12,<5
+exceptiongroup>=1.2,<2; python_version < "3.11"

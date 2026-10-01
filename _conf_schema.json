@@ -2,7 +2,7 @@
   "baizhi_api_key": {
     "type": "string",
     "description": "百智云 API Key",
-    "hint": "在 https://agent-toolkit.app.baizhi.cloud/ 创建。只填 Key 本身，不要带 Bearer 前缀。注意：secret 只在管理面板遮罩显示，配置值仍会原样保存在插件配置文件中；本插件不会记录或回显它。",
+    "hint": "在 https://agent-toolkit.app.baizhi.cloud/ 创建，只填 Key。secret 仅遮罩显示，配置文件仍明文保存。插件使用固定错误消息并脱敏结果中当前 Key 的精确回显；不是通用隐私过滤器。",
     "default": "",
     "secret": true,
     "obvious_hint": true
@@ -10,19 +10,23 @@
   "endpoint": {
     "type": "string",
     "description": "MCP 服务地址",
-    "hint": "默认使用百智云托管端点 https://agent-toolkit.app.baizhi.cloud/mcp。仅在服务方调整地址时修改。",
+    "hint": "本候选版本只接受固定 HTTPS 地址 https://agent-toolkit.app.baizhi.cloud/mcp；其他地址将在发送凭据之前拒绝。",
     "default": "https://agent-toolkit.app.baizhi.cloud/mcp"
   },
   "enabled_tools": {
     "type": "list",
     "description": "注册哪些工具",
-    "hint": "默认三个只读工具。取消勾选的工具不会出现在 LLM 的工具列表中；全部取消将恢复为默认三项。可选值：websearch_search、web_scrape、web_extract。",
-    "default": ["websearch_search", "web_scrape", "web_extract"]
+    "hint": "默认启用三个工具；可产生额度消耗、记录摘要或创建归档。取消全部会关闭全部，未知项会告警并忽略，重复项去重。可选：websearch_search、web_scrape、web_extract。",
+    "default": [
+      "websearch_search",
+      "web_scrape",
+      "web_extract"
+    ]
   },
   "timeout_seconds": {
     "type": "int",
     "description": "单次调用超时（秒）",
-    "hint": "网页读取与信息提取可能较慢，建议不低于 60 秒。",
+    "hint": "单次操作（握手、发现和调用合计）的总超时，1 到 300 秒；默认 60 秒，不自动重试工具调用。",
     "default": 60
   }
 }
