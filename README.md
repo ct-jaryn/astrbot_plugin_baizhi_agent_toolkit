@@ -1,16 +1,16 @@
 # 百智云 Agent Toolkit for AstrBot
 
-本目录是 **1.0.3-rc.1 本地修复候选，尚未发布**。它修复公开 1.0.2 的参数映射、密钥回显路径、MCP 2 结果解析、空工具列表、错误处理，以及真实宿主绑定插件实例后工具 handler 参数不匹配的问题。不要把市场中的 1.0.2 当作已包含这些修复；本次没有上传或更新市场。
+源码版本为 **1.0.3**。它修复 1.0.2 的参数映射、密钥回显路径、MCP 2 结果解析、空工具列表、错误处理，以及真实宿主绑定插件实例后工具 handler 参数不匹配的问题。市场下载是否包含修复，需核对条目的实际版本与 commit；旧 1.0.2 不包含这些修复。
 
 插件通过远程 MCP（Streamable HTTP）连接[百智云托管服务](https://agent-toolkit.app.baizhi.cloud/)，使用用户自己的 API Key。它不实现抓取后端，不代表 AstrBot 官方认证。
 
 ## 运行前提与安装
 
-- AstrBot `>=4.16,<5`；运行依赖要求 Python 3.10 或以上，本次离线测试使用 Python 3.12。Python 3.10 的异常组使用 requirements 中的 exceptiongroup backport；该解释器版本尚未单独验收。
-- MCP SDK `>=1.30.0,<3`。客户端已分别测试 1.30.0 和 2.2.0；本次真实 AstrBot 4.28.1 宿主验证使用其声明允许的 MCP 1.30.0（宿主要求 `<2`）。其他 AstrBot/MCP 组合仍需验收，不应为了本插件绕过宿主的依赖约束。
+- AstrBot `>=4.16,<5`；按宿主的 Python 约束安装。已检查的宿主 `pyproject.toml` 要求 Python 3.12 或以上，本次使用 Python 3.12.14；其他解释器及未来宿主版本未逐项验收。
+- MCP SDK `>=1.30.0,<3`。客户端独立套件分别测试 1.30.0 和 2.2.0；真实 AstrBot 宿主使用其声明允许的 MCP 1.30.0（宿主要求 `<2`）。MCP 2 的客户端测试不代表宿主支持 MCP 2，不应绕过宿主的依赖约束。
 - 账号、专用可撤销 API Key 和服务额度。工具输入会发送到百智云，调用可能消耗额度并产生费用。
 
-本候选需要人工安装到隔离的 AstrBot 测试环境：将本目录复制为 `data/plugins/astrbot_plugin_baizhi_agent_toolkit/`，在该环境安装 `requirements.txt` 后加载。正式发布前不要把候选直接覆盖到生产机器人。
+先在隔离的 AstrBot 环境安装：可从已核对版本的市场条目安装，或使用宿主的插件 ZIP 上传入口；也可将本目录复制为 `data/plugins/astrbot_plugin_baizhi_agent_toolkit/`，安装 `requirements.txt` 后加载。不要把未经确认的升级直接覆盖到生产机器人。
 
 ## 配置
 
@@ -59,17 +59,21 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q -p no:cacheprovider test
 
 `tests/test_plugin_module.py` 使用 AstrBot API 的最小 stub 验证注册、空列表、去重、配置、日志及命令。测试会模拟宿主的 `functools.partial(handler, instance)` 绑定，再传消息事件；仅直接调用未绑定的闭包会漏掉真实执行错误。stub 本身不能证明宿主生命周期兼容。
 
-2026-09-20 另在官方 AstrBot 4.28.1 源码 [6914bc3](https://github.com/AstrBotDevs/AstrBot/commit/6914bc3aa61e14ca9a9c2cb37a0f9ec1ff5d6334)、Python 3.12.14、MCP 1.30.0 的专用环境通过了 17 项隔离检查：真实 `Context` / `PluginManager` 加载本地插件副本，注册并导出三个 LLM 工具 schema，经 `FunctionToolManager` 的 `ToolSet` 权限 wrapper 调用；真实配置文件保存后重载、空列表关闭全部、恢复单个工具，以及卸载时移除工具、模块、命令注册和配置文件。配置与 SQLite 数据库位于隔离的 `ASTRBOT_ROOT`，临时文件使用独立 `TMPDIR`。
+2026-10-01 在官方稳定 AstrBot [4.28.2 / 3c7adafa](https://github.com/AstrBotDevs/AstrBot/commit/3c7adafa1397e182d60b1016bf88759265113c8a) 和 [4.28.1 / ab42c0d9](https://github.com/AstrBotDevs/AstrBot/commit/ab42c0d9b726d82ad0f9563e04c53a4460c00d61)、Python 3.12.14、MCP 1.30.0 的专用环境，各通过 30 项隔离宿主检查。实际 `PluginManager.install_plugin_from_file` 安装旧 1.0.2 源码的 ZIP，再安装内容与 digest 不同的修复 ZIP；真实配置文件路径、插件作用域与合成 Key 保留，配置编辑/重载和空列表关闭仍生效。旧版三工具均在实例/事件绑定处报 TypeError，修复版经原生 `FunctionToolExecutor` 和权限 wrapper 进入客户端与 SDK。
 
-三工具执行使用真实宿主调用路径和 MCP SDK，只有远端 HTTP 响应由 `httpx.MockTransport` 模拟，Key 为合成值，所有外部 socket 连接被阻止。没有启动 WebUI、实际 LLM provider 会话或生产服务。修复前真实 wrapper 的四次调用均因 handler 多收一个位置参数失败；修复后 17 项全部通过。宿主验收在独立临时环境执行；普通单测不引入完整宿主依赖，也不等同于这组宿主验收。
+同一环境使用实际 `ToolLoopAgentRunner`，合成 Provider 先选择三个已安装工具，再接收三个工具结果并结束回合；不是直接调用 handler 代替工具调度。权限拒绝、输入错误、401、工具错误、文本/结构化 Key 回显、取消无重试、卸载清理与日志检查也通过。当前客户端及 API stub 单测在 MCP 1.30.0 和 2.2.0 各通过 79 项。
 
-## 发布前仍需完成
+最低声明版本官方 [AstrBot 4.16.0 / fcd18503](https://github.com/AstrBotDevs/AstrBot/commit/fcd18503cbd59dab5883a9c96c7411547c978c55) 另通过 14 项最小兼容检查：真实 ZIP 安装、注册、插件实例绑定、原生 executor 调度三个 SDK 调用、参数映射、空 Key、配置保存/重载、空工具与卸载。该宿主使用原生 partial 绑定，未声称它具备新版的全局工具权限 wrapper。
 
-1. WebUI 安装与配置操作、真实命令分发、实际 LLM provider 会话及多插件冲突验收；其他受支持 AstrBot 版本还需兼容性验证。本次真实管理器加载本地副本不等于已验证 WebUI 安装或完整 Agent 回合。
-2. 用已授权、专用可撤销 Key 核对现网 schema/权限，并完成有明确额度边界的三个工具生产验收。
+这些检查只替换远端 HTTP 响应为 `httpx.MockTransport`；完整回合的模型响应由合成 Provider 提供。`ASTRBOT_ROOT`、SQLite、插件配置与 `TMPDIR` 均隔离，禁用指标上传，测试进程禁止网络出站，pip 禁用索引；没有真实模型或生产服务调用。管理器 ZIP 安装已验，WebUI 浏览器操作、消息平台命令分发和生产验收仍未覆盖。普通 stub 单测不能替代以上宿主检查。
+
+## 验证边界与部署前检查
+
+1. 离线宿主检查不覆盖 WebUI 浏览器交互、消息平台命令分发、真实 LLM provider 或多插件部署；其他宿主版本需另验。ZIP 安装入口与工具回合的合成验证见上文，不能当作真实模型/服务验收。
+2. 部署时用已授权、专用可撤销 Key 核对现网 schema/权限，并在明确额度边界内验证所需工具。仓库保留的历史 schema 与合成测试不能代替这一步。
 3. OS 凭据保护、备份/导出与访问权限、网络/TLS/代理部署、并发和响应内存边界验收。本次保存重载仅证明配置值能持久化并生效，不证明加密或 OS 隔离。
-4. 完整依赖锁/安全审查、发布身份及素材权利确认、候选人工复核；再单独发布并核验市场实际版本。
+4. 按部署环境完成依赖与权限审查；升级后核验已安装版本和实际工具。发布者须另外核验市场版本、commit 与下载包，源码提交不等于市场更新。
 
-以上仍未完成的步骤不因隔离宿主检查通过而豁免。本次没有接受平台协议、发布正式版本或宣称市场审核通过。
+这些部署边界不因离线检查通过而消失；本说明不宣称真实服务、费用或市场审核已验收。
 
 MIT；见 LICENSE。
