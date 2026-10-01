@@ -28,7 +28,10 @@ _TOOL_SPECS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "搜索词，不要包含 site: 过滤语法"},
+                "query": {
+                    "type": "string",
+                    "description": "搜索词，不要包含 site: 过滤语法",
+                },
                 "count": {
                     "type": "integer",
                     "description": "返回结果数量，1 到 50，默认 10",
@@ -65,8 +68,14 @@ _TOOL_SPECS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "一个公开的 HTTP 或 HTTPS 页面地址"},
-                "accept_language": {"type": "string", "description": "可选，期望语言，例如 zh-CN 或 en-US"},
+                "url": {
+                    "type": "string",
+                    "description": "一个公开的 HTTP 或 HTTPS 页面地址",
+                },
+                "accept_language": {
+                    "type": "string",
+                    "description": "可选，期望语言，例如 zh-CN 或 en-US",
+                },
                 "return_format": {
                     "type": "string",
                     "description": "返回格式，默认 markdown",
@@ -89,8 +98,14 @@ _TOOL_SPECS: dict[str, dict] = {
         "parameters": {
             "type": "object",
             "properties": {
-                "url": {"type": "string", "description": "一个公开的 HTTP 或 HTTPS 页面地址"},
-                "accept_language": {"type": "string", "description": "可选，期望语言，例如 zh-CN 或 en-US"},
+                "url": {
+                    "type": "string",
+                    "description": "一个公开的 HTTP 或 HTTPS 页面地址",
+                },
+                "accept_language": {
+                    "type": "string",
+                    "description": "可选，期望语言，例如 zh-CN 或 en-US",
+                },
                 "fields_json": {
                     "type": "string",
                     "description": '可选，字段名到类型的 JSON 对象字符串，例如 {"title":"string"}',
@@ -141,7 +156,9 @@ class BaizhiAgentToolkitPlugin(Star):
         super().__init__(context)
         self.config = config if config is not None else {}
         self.plugin_config = dict(self.config)
-        self.enabled_tools = _parse_enabled_tools(self.plugin_config.get("enabled_tools"))
+        self.enabled_tools = _parse_enabled_tools(
+            self.plugin_config.get("enabled_tools")
+        )
 
         api_key_set = bool(self._api_key())
         if not api_key_set:
@@ -168,7 +185,9 @@ class BaizhiAgentToolkitPlugin(Star):
 
     def _timeout(self) -> int:
         try:
-            return min(max(int(self.plugin_config.get("timeout_seconds") or 60), 1), 300)
+            return min(
+                max(int(self.plugin_config.get("timeout_seconds") or 60), 1), 300
+            )
         except (TypeError, ValueError, OverflowError):
             return 60
 
@@ -217,7 +236,11 @@ class BaizhiAgentToolkitPlugin(Star):
             )
             return
 
-        ok, message = await probe(api_key=self._api_key(), endpoint=self._endpoint(), timeout_seconds=self._timeout())
+        ok, message = await probe(
+            api_key=self._api_key(),
+            endpoint=self._endpoint(),
+            timeout_seconds=self._timeout(),
+        )
         yield event.plain_result(
             f"{'连接正常。' if ok else '连接失败。'}\n"
             f"端点：{DEFAULT_ENDPOINT}\n"

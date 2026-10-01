@@ -56,7 +56,9 @@ def _domain(value):
         ipaddress.ip_address(value)
     except ValueError:
         if "." not in value or ":" in value:
-            raise InputError("Search filters must contain bare domains or IP addresses.") from None
+            raise InputError(
+                "Search filters must contain bare domains or IP addresses."
+            ) from None
     return value
 
 
@@ -68,22 +70,40 @@ def _url(value):
         port = parsed.port
     except ValueError:
         raise InputError("Provide a public HTTP or HTTPS URL.") from None
-    if (parsed.scheme not in {"http", "https"} or not host or parsed.username is not None
-            or parsed.password is not None or "#" in value or "\\" in value
-            or any(ord(c) <= 32 for c in value)):
-        raise InputError("Provide a public HTTP or HTTPS URL without credentials or a fragment.")
-    if host.lower() == "localhost" or host.lower().endswith((".localhost", ".local", ".internal")):
-        raise InputError("Local and private targets are not supported by this integration.")
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not host
+        or parsed.username is not None
+        or parsed.password is not None
+        or "#" in value
+        or "\\" in value
+        or any(ord(c) <= 32 for c in value)
+    ):
+        raise InputError(
+            "Provide a public HTTP or HTTPS URL without credentials or a fragment."
+        )
+    if host.lower() == "localhost" or host.lower().endswith(
+        (".localhost", ".local", ".internal")
+    ):
+        raise InputError(
+            "Local and private targets are not supported by this integration."
+        )
     try:
         address = ipaddress.ip_address(host)
     except ValueError:
-        if "." not in host or re.fullmatch(r"(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*", host):
+        if "." not in host or re.fullmatch(
+            r"(?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\.(?:0[xX][0-9a-fA-F]+|[0-9]+))*", host
+        ):
             raise InputError("Provide a public hostname.") from None
     else:
         if not address.is_global:
-            raise InputError("Local and private targets are not supported by this integration.")
+            raise InputError(
+                "Local and private targets are not supported by this integration."
+            )
     if port not in {None, 80, 443}:
-        raise InputError("Only standard HTTP and HTTPS ports are supported by this integration.")
+        raise InputError(
+            "Only standard HTTP and HTTPS ports are supported by this integration."
+        )
     return value
 
 
@@ -91,23 +111,52 @@ def build_arguments(name: str, parameters: dict) -> dict:
     if name not in ALLOWED_TOOLS or not isinstance(parameters, dict):
         raise InputError("This tool is not available in the integration.")
     allowed = {
-        "websearch_search": {"query", "count", "need_summary", "time_range", "domains_json", "exclude_domains_json"},
+        "websearch_search": {
+            "query",
+            "count",
+            "need_summary",
+            "time_range",
+            "domains_json",
+            "exclude_domains_json",
+        },
         "web_scrape": {"url", "accept_language", "download", "return_format"},
-        "web_extract": {"url", "accept_language", "download", "fields_json", "instruction"},
+        "web_extract": {
+            "url",
+            "accept_language",
+            "download",
+            "fields_json",
+            "instruction",
+        },
     }[name]
     if set(parameters) - allowed:
         raise InputError("Unsupported tool parameters were supplied.")
     if name == "websearch_search":
         count = parameters.get("count", 10)
-        if type(count) not in {int, float} or not 1 <= count <= 50 or not float(count).is_integer():
+        if (
+            type(count) not in {int, float}
+            or not 1 <= count <= 50
+            or not float(count).is_integer()
+        ):
             raise InputError("Result count must be an integer from 1 to 50.")
         time_range = parameters.get("time_range", "month")
-        if not isinstance(time_range, str) or time_range not in {"day", "week", "month", "year"}:
+        if not isinstance(time_range, str) or time_range not in {
+            "day",
+            "week",
+            "month",
+            "year",
+        }:
             raise InputError("Select a supported search time range.")
-        result = {"query": _text(parameters.get("query"), required=True), "count": int(count),
-                  "need_summary": _boolean(parameters.get("need_summary")), "time_range": time_range}
+        result = {
+            "query": _text(parameters.get("query"), required=True),
+            "count": int(count),
+            "need_summary": _boolean(parameters.get("need_summary")),
+            "time_range": time_range,
+        }
         filters = {}
-        for ui, remote in (("domains_json", "domains"), ("exclude_domains_json", "exclude_domains")):
+        for ui, remote in (
+            ("domains_json", "domains"),
+            ("exclude_domains_json", "exclude_domains"),
+        ):
             values = _json_field(parameters.get(ui), list)
             if values is not None:
                 if len(values) > 50:
@@ -116,7 +165,10 @@ def build_arguments(name: str, parameters: dict) -> dict:
         if filters:
             result["filter"] = filters
         return result
-    result = {"url": _url(parameters.get("url")), "download": _boolean(parameters.get("download"))}
+    result = {
+        "url": _url(parameters.get("url")),
+        "download": _boolean(parameters.get("download")),
+    }
     language = _text(parameters.get("accept_language"), limit=100)
     if language:
         if any(ord(c) < 32 for c in language):
@@ -124,7 +176,10 @@ def build_arguments(name: str, parameters: dict) -> dict:
         result["accept_language"] = language
     if name == "web_scrape":
         format_value = parameters.get("return_format", "markdown")
-        if not isinstance(format_value, str) or format_value not in {"markdown", "json"}:
+        if not isinstance(format_value, str) or format_value not in {
+            "markdown",
+            "json",
+        }:
             raise InputError("Select markdown or json for the page format.")
         result["return_format"] = format_value
         return result
@@ -133,9 +188,16 @@ def build_arguments(name: str, parameters: dict) -> dict:
     if not fields and not instruction:
         raise InputError("Provide extraction fields or an instruction.")
     if fields:
-        if len(fields) > 50 or any(not k.strip() or len(k) > 200 or not isinstance(v, str) or v not in {"string", "number", "boolean", "array"}
-                                  for k, v in fields.items()):
-            raise InputError("Extraction fields must map names to string, number, boolean, or array.")
+        if len(fields) > 50 or any(
+            not k.strip()
+            or len(k) > 200
+            or not isinstance(v, str)
+            or v not in {"string", "number", "boolean", "array"}
+            for k, v in fields.items()
+        ):
+            raise InputError(
+                "Extraction fields must map names to string, number, boolean, or array."
+            )
         result["fields"] = fields
     if instruction:
         result["instruction"] = instruction
